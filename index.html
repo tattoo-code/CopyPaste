@@ -74,17 +74,30 @@
             border-radius: 4px;
             overflow: hidden;
             border: 1px solid #dcdde1;
+            cursor: grab;
+        }
+        .item-row:active {
+            cursor: grabbing;
+        }
+        .item-row.dragging {
+            opacity: 0.4;
         }
         .item-row.selected {
             background: #d4efdf;
             border-color: #a3e4d7;
+        }
+        .drag-handle {
+            padding: 0 10px;
+            color: #7f8c8d;
+            font-weight: bold;
+            user-select: none;
         }
         .select-btn {
             flex: 1;
             background: transparent;
             color: #2c3e50;
             border: none;
-            padding: 12px 15px;
+            padding: 12px 10px;
             text-align: left;
             font-size: 1rem;
             cursor: pointer;
@@ -92,6 +105,15 @@
         }
         .select-btn:hover {
             background: rgba(0,0,0,0.05);
+        }
+        .selection-badge {
+            background: #27ae60;
+            color: white;
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-right: 10px;
+            font-weight: bold;
         }
         .delete-btn {
             background-color: #e74c3c;
@@ -105,7 +127,7 @@
         .delete-btn:hover {
             background-color: #c0392b;
         }
-        /* 出力・コピーエリア */
+        /* 出力・操作エリア */
         .output-box {
             background: #f8f9fa;
             border: 1px solid #ced4da;
@@ -115,7 +137,7 @@
         }
         .output-textarea {
             width: 100%;
-            height: 60px;
+            height: 70px;
             padding: 8px;
             box-sizing: border-box;
             border: 1px solid #ccc;
@@ -124,6 +146,16 @@
             font-size: 1rem;
             background: #fff;
             margin-bottom: 8px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        .clear-btn {
+            background-color: #95a5a6;
+        }
+        .clear-btn:hover {
+            background-color: #7f8c8d;
         }
         .toast {
             position: fixed;
@@ -151,9 +183,9 @@
     <!-- 食事セクション -->
     <div class="card">
         <h2>食事</h2>
-        <p class="note">※項目をタップして選択すると、自動でカンマ区切りで結合されます。</p>
+        <p class="note">※項目をタップした順に選択され、自動で「、」区切りで出力されます。ドラッグして順番入替も可能です。</p>
         <div class="input-group">
-            <input type="text" id="input-shokuji" placeholder="登録する文字列を入力...">
+            <input type="text" id="input-shokuji" placeholder="登録する文字列を入力 (例: 毎食めかぶ)">
             <button onclick="addItem('shokuji')">追加</button>
         </div>
         <div id="list-shokuji" class="item-list"></div>
@@ -161,16 +193,19 @@
         <div class="output-box">
             <p style="margin: 0 0 5px 0; font-size: 0.9rem; font-weight: bold; color: #555;">出力結果（選択中の項目）</p>
             <textarea id="output-shokuji" class="output-textarea" readonly></textarea>
-            <button onclick="copyOutput('shokuji')">この内容をコピー</button>
+            <div class="button-group">
+                <button onclick="copyOutput('shokuji')">この内容をコピー</button>
+                <button class="clear-btn" onclick="clearSelection('shokuji')">この内容をクリア</button>
+            </div>
         </div>
     </div>
 
     <!-- サプリセクション -->
     <div class="card">
         <h2>サプリ</h2>
-        <p class="note">※項目をタップして選択すると、自動でカンマ区切りで結合されます。</p>
+        <p class="note">※項目をタップした順に選択され、改行区切りで出力されます。（半角「,」等を含めた登録に対応）</p>
         <div class="input-group">
-            <input type="text" id="input-supple" placeholder="登録する文字列を入力...">
+            <input type="text" id="input-supple" placeholder="登録する文字列を入力 (例: D,ビタミンミックス,ダイエットサポート 1)">
             <button onclick="addItem('supple')">追加</button>
         </div>
         <div id="list-supple" class="item-list"></div>
@@ -178,7 +213,10 @@
         <div class="output-box">
             <p style="margin: 0 0 5px 0; font-size: 0.9rem; font-weight: bold; color: #555;">出力結果（選択中の項目）</p>
             <textarea id="output-supple" class="output-textarea" readonly></textarea>
-            <button onclick="copyOutput('supple')">この内容をコピー</button>
+            <div class="button-group">
+                <button onclick="copyOutput('supple')">この内容をコピー</button>
+                <button class="clear-btn" onclick="clearSelection('supple')">この内容をクリア</button>
+            </div>
         </div>
     </div>
 
@@ -186,10 +224,15 @@
     <div id="toast" class="toast">コピーしました！</div>
 
     <script>
+        // 選択された項目のインデックスを「選んだ順（配列）」で保持
         const selectedState = {
-            shokuji: new Set(),
-            supple: new Set()
+            shokuji: [],
+            supple: []
         };
+
+        // ドラッグ中のインデックスを一時保持
+        let draggedIndex = null;
+        let activeCategory = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             loadItems('shokuji');
@@ -213,21 +256,63 @@
             
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             
-            selectedState[category].forEach(idx => {
-                if (idx >= items.length) selectedState[category].delete(idx);
-            });
+            // 存在しないインデックスやずれたインデックスの整合性を維持
+            selectedState[category] = selectedState[category].filter(idx => idx < items.length);
 
             items.forEach((text, index) => {
                 const row = document.createElement('div');
                 row.className = 'item-row';
-                if (selectedState[category].has(index)) {
+                row.draggable = true;
+
+                // ドラッグ＆ドロップイベント
+                row.addEventListener('dragstart', (e) => {
+                    draggedIndex = index;
+                    activeCategory = category;
+                    setTimeout(() => row.classList.add('dragging'), 0);
+                });
+
+                row.addEventListener('dragend', () => {
+                    row.classList.remove('dragging');
+                    draggedIndex = null;
+                    activeCategory = null;
+                });
+
+                row.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                });
+
+                row.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (activeCategory === category && draggedIndex !== null && draggedIndex !== index) {
+                        reorderItems(category, draggedIndex, index);
+                    }
+                });
+
+                const selectionOrder = selectedState[category].indexOf(index);
+                if (selectionOrder !== -1) {
                     row.classList.add('selected');
                 }
+
+                const handle = document.createElement('span');
+                handle.className = 'drag-handle';
+                handle.textContent = '☰';
 
                 const selectBtn = document.createElement('button');
                 selectBtn.className = 'select-btn';
                 selectBtn.textContent = text;
                 selectBtn.onclick = () => toggleSelect(category, index);
+
+                row.appendChild(handle);
+
+                // 選択順序のバッジを表示
+                if (selectionOrder !== -1) {
+                    const badge = document.createElement('span');
+                    badge.className = 'selection-badge';
+                    badge.textContent = selectionOrder + 1;
+                    row.appendChild(badge);
+                }
+
+                row.appendChild(selectBtn);
 
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'delete-btn';
@@ -237,7 +322,6 @@
                     deleteItem(category, index);
                 };
 
-                row.appendChild(selectBtn);
                 row.appendChild(deleteBtn);
                 listEl.appendChild(row);
             });
@@ -246,28 +330,52 @@
         }
 
         function toggleSelect(category, index) {
-            if (selectedState[category].has(index)) {
-                selectedState[category].delete(index);
+            const arr = selectedState[category];
+            const pos = arr.indexOf(index);
+
+            if (pos !== -1) {
+                // すでに選択されている場合は解除
+                arr.splice(pos, 1);
             } else {
-                selectedState[category].add(index);
+                // 選んだ順に配列の末尾に追加
+                arr.push(index);
             }
+            loadItems(category);
+        }
+
+        function clearSelection(category) {
+            selectedState[category] = [];
+            loadItems(category);
+        }
+
+        function reorderItems(category, fromIndex, toIndex) {
+            const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            const [movedItem] = items.splice(fromIndex, 1);
+            items.splice(toIndex, 0, movedItem);
+            localStorage.setItem(getStorageKey(category), JSON.stringify(items));
+
+            // 選択状態のインデックス配列を新しい並び順に追従させる
+            const oldItems = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            // 単純化のため、並び替え時は一旦選択をリセットするか、再マッピングする
+            selectedState[category] = [];
+
             loadItems(category);
         }
 
         function updateOutput(category) {
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             const outputEl = document.getElementById('output-' + category);
-            
-            const selectedTexts = [];
-            const sortedIndices = Array.from(selectedState[category]).sort((a, b) => a - b);
-            
-            sortedIndices.forEach(idx => {
-                if (items[idx]) {
-                    selectedTexts.push(items[idx] + '、');
-                }
-            });
+            const indices = selectedState[category];
 
-            outputEl.value = selectedTexts.join('');
+            if (category === 'shokuji') {
+                // 食事は「、」で結合
+                const selectedTexts = indices.map(idx => items[idx] ? items[idx] + '、' : '');
+                outputEl.value = selectedTexts.join('');
+            } else if (category === 'supple') {
+                // サプリは改行区切りで出力
+                const selectedTexts = indices.map(idx => items[idx] || '');
+                outputEl.value = selectedTexts.join('\n');
+            }
         }
 
         function addItem(category) {
@@ -288,7 +396,6 @@
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             const targetText = items[index];
 
-            // 削除確認のダイアログを表示
             if (!confirm(`「${targetText}」を削除してもよろしいですか？`)) {
                 return;
             }
@@ -296,15 +403,8 @@
             items.splice(index, 1);
             localStorage.setItem(getStorageKey(category), JSON.stringify(items));
 
-            const newSelected = new Set();
-            selectedState[category].forEach(idx => {
-                if (idx < index) {
-                    newSelected.add(idx);
-                } else if (idx > index) {
-                    newSelected.add(idx - 1);
-                }
-            });
-            selectedState[category] = newSelected;
+            // 選択状態をリセット
+            selectedState[category] = [];
 
             loadItems(category);
         }
