@@ -186,7 +186,6 @@
     <div id="toast" class="toast">コピーしました！</div>
 
     <script>
-        // 各カテゴリの選択状態を保持するオブジェクト
         const selectedState = {
             shokuji: new Set(),
             supple: new Set()
@@ -214,7 +213,6 @@
             
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             
-            // 存在しないインデックスが選択状態に残っていればクリア
             selectedState[category].forEach(idx => {
                 if (idx >= items.length) selectedState[category].delete(idx);
             });
@@ -261,7 +259,6 @@
             const outputEl = document.getElementById('output-' + category);
             
             const selectedTexts = [];
-            // 登録されている順序を保って結合するためにソート
             const sortedIndices = Array.from(selectedState[category]).sort((a, b) => a - b);
             
             sortedIndices.forEach(idx => {
@@ -289,10 +286,16 @@
 
         function deleteItem(category, index) {
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            const targetText = items[index];
+
+            // 削除確認のダイアログを表示
+            if (!confirm(`「${targetText}」を削除してもよろしいですか？`)) {
+                return;
+            }
+
             items.splice(index, 1);
             localStorage.setItem(getStorageKey(category), JSON.stringify(items));
 
-            // 選択状態のインデックスを再構築（削除されたインデックス以降をずらす）
             const newSelected = new Set();
             selectedState[category].forEach(idx => {
                 if (idx < index) {
