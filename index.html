@@ -87,9 +87,9 @@
             border-color: #a3e4d7;
         }
         .drag-handle {
-            padding: 0 10px;
+            padding: 12px 10px;
             color: #7f8c8d;
-            font-weight: bold;
+            font-size: 1.1rem;
             user-select: none;
         }
         .select-btn {
@@ -97,7 +97,7 @@
             background: transparent;
             color: #2c3e50;
             border: none;
-            padding: 12px 10px;
+            padding: 12px 15px;
             text-align: left;
             font-size: 1rem;
             cursor: pointer;
@@ -105,15 +105,6 @@
         }
         .select-btn:hover {
             background: rgba(0,0,0,0.05);
-        }
-        .selection-badge {
-            background: #27ae60;
-            color: white;
-            font-size: 0.75rem;
-            padding: 2px 6px;
-            border-radius: 10px;
-            margin-right: 10px;
-            font-weight: bold;
         }
         .delete-btn {
             background-color: #e74c3c;
@@ -127,7 +118,7 @@
         .delete-btn:hover {
             background-color: #c0392b;
         }
-        /* 出力・操作エリア */
+        /* 出力・コピーエリア */
         .output-box {
             background: #f8f9fa;
             border: 1px solid #ced4da;
@@ -137,7 +128,7 @@
         }
         .output-textarea {
             width: 100%;
-            height: 70px;
+            height: 60px;
             padding: 8px;
             box-sizing: border-box;
             border: 1px solid #ccc;
@@ -151,10 +142,10 @@
             display: flex;
             gap: 10px;
         }
-        .clear-btn {
+        .btn-clear {
             background-color: #95a5a6;
         }
-        .clear-btn:hover {
+        .btn-clear:hover {
             background-color: #7f8c8d;
         }
         .toast {
@@ -183,9 +174,9 @@
     <!-- 食事セクション -->
     <div class="card">
         <h2>食事</h2>
-        <p class="note">※項目をタップした順に選択され、自動で「、」区切りで出力されます。ドラッグして順番入替も可能です。</p>
+        <p class="note">※項目をタップして選んだ順に出力されます。ドラッグして並び替えが可能です。</p>
         <div class="input-group">
-            <input type="text" id="input-shokuji" placeholder="登録する文字列を入力 (例: 毎食めかぶ)">
+            <input type="text" id="input-shokuji" placeholder="登録する文字列を入力...">
             <button onclick="addItem('shokuji')">追加</button>
         </div>
         <div id="list-shokuji" class="item-list"></div>
@@ -195,7 +186,7 @@
             <textarea id="output-shokuji" class="output-textarea" readonly></textarea>
             <div class="button-group">
                 <button onclick="copyOutput('shokuji')">この内容をコピー</button>
-                <button class="clear-btn" onclick="clearSelection('shokuji')">この内容をクリア</button>
+                <button class="btn-clear" onclick="clearOutput('shokuji')">この内容をクリア</button>
             </div>
         </div>
     </div>
@@ -203,9 +194,9 @@
     <!-- サプリセクション -->
     <div class="card">
         <h2>サプリ</h2>
-        <p class="note">※項目をタップした順に選択され、改行区切りで出力されます。（半角「,」等を含めた登録に対応）</p>
+        <p class="note">※項目をタップして選んだ順に出力されます（区切り文字: 半角,）。ドラッグして並び替えが可能です。</p>
         <div class="input-group">
-            <input type="text" id="input-supple" placeholder="登録する文字列を入力 (例: D,ビタミンミックス,ダイエットサポート 1)">
+            <input type="text" id="input-supple" placeholder="登録する文字列を入力...">
             <button onclick="addItem('supple')">追加</button>
         </div>
         <div id="list-supple" class="item-list"></div>
@@ -215,7 +206,7 @@
             <textarea id="output-supple" class="output-textarea" readonly></textarea>
             <div class="button-group">
                 <button onclick="copyOutput('supple')">この内容をコピー</button>
-                <button class="clear-btn" onclick="clearSelection('supple')">この内容をクリア</button>
+                <button class="btn-clear" onclick="clearOutput('supple')">この内容をクリア</button>
             </div>
         </div>
     </div>
@@ -224,15 +215,13 @@
     <div id="toast" class="toast">コピーしました！</div>
 
     <script>
-        // 選択された項目のインデックスを「選んだ順（配列）」で保持
+        // 選択された項目のインデックスを「選んだ順（配列）」で保持する
         const selectedState = {
             shokuji: [],
             supple: []
         };
 
-        // ドラッグ中のインデックスを一時保持
-        let draggedIndex = null;
-        let activeCategory = null;
+        let draggedInfo = null; // ドラッグ中の情報保持用
 
         document.addEventListener('DOMContentLoaded', () => {
             loadItems('shokuji');
@@ -256,25 +245,27 @@
             
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             
-            // 存在しないインデックスやずれたインデックスの整合性を維持
+            // 存在しないインデックスや範囲外になった選択状態を整理
             selectedState[category] = selectedState[category].filter(idx => idx < items.length);
 
             items.forEach((text, index) => {
                 const row = document.createElement('div');
                 row.className = 'item-row';
                 row.draggable = true;
+                
+                if (selectedState[category].includes(index)) {
+                    row.classList.add('selected');
+                }
 
                 // ドラッグ＆ドロップイベント
                 row.addEventListener('dragstart', (e) => {
-                    draggedIndex = index;
-                    activeCategory = category;
-                    setTimeout(() => row.classList.add('dragging'), 0);
+                    draggedInfo = { category, index };
+                    row.classList.add('dragging');
                 });
 
                 row.addEventListener('dragend', () => {
                     row.classList.remove('dragging');
-                    draggedIndex = null;
-                    activeCategory = null;
+                    draggedInfo = null;
                 });
 
                 row.addEventListener('dragover', (e) => {
@@ -283,37 +274,26 @@
 
                 row.addEventListener('drop', (e) => {
                     e.preventDefault();
-                    if (activeCategory === category && draggedIndex !== null && draggedIndex !== index) {
-                        reorderItems(category, draggedIndex, index);
-                    }
+                    if (!draggedInfo || draggedInfo.category !== category) return;
+                    const fromIndex = draggedInfo.index;
+                    const toIndex = index;
+                    if (fromIndex === toIndex) return;
+
+                    reorderItems(category, fromIndex, toIndex);
                 });
 
-                const selectionOrder = selectedState[category].indexOf(index);
-                if (selectionOrder !== -1) {
-                    row.classList.add('selected');
-                }
-
-                const handle = document.createElement('span');
+                // ドラッグハンドル
+                const handle = document.createElement('div');
                 handle.className = 'drag-handle';
-                handle.textContent = '☰';
+                handle.innerHTML = '☰';
 
+                // 選択ボタン
                 const selectBtn = document.createElement('button');
                 selectBtn.className = 'select-btn';
                 selectBtn.textContent = text;
                 selectBtn.onclick = () => toggleSelect(category, index);
 
-                row.appendChild(handle);
-
-                // 選択順序のバッジを表示
-                if (selectionOrder !== -1) {
-                    const badge = document.createElement('span');
-                    badge.className = 'selection-badge';
-                    badge.textContent = selectionOrder + 1;
-                    row.appendChild(badge);
-                }
-
-                row.appendChild(selectBtn);
-
+                // 削除ボタン
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = '削除';
@@ -322,6 +302,8 @@
                     deleteItem(category, index);
                 };
 
+                row.appendChild(handle);
+                row.appendChild(selectBtn);
                 row.appendChild(deleteBtn);
                 listEl.appendChild(row);
             });
@@ -331,20 +313,15 @@
 
         function toggleSelect(category, index) {
             const arr = selectedState[category];
-            const pos = arr.indexOf(index);
+            const existingPos = arr.indexOf(index);
 
-            if (pos !== -1) {
+            if (existingPos > -1) {
                 // すでに選択されている場合は解除
-                arr.splice(pos, 1);
+                arr.splice(existingPos, 1);
             } else {
-                // 選んだ順に配列の末尾に追加
+                // 選択されていない場合は選んだ順に追加
                 arr.push(index);
             }
-            loadItems(category);
-        }
-
-        function clearSelection(category) {
-            selectedState[category] = [];
             loadItems(category);
         }
 
@@ -352,11 +329,21 @@
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             const [movedItem] = items.splice(fromIndex, 1);
             items.splice(toIndex, 0, movedItem);
+
             localStorage.setItem(getStorageKey(category), JSON.stringify(items));
 
-            // 選択状態のインデックス配列を新しい並び順に追従させる
-            const oldItems = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
-            // 単純化のため、並び替え時は一旦選択をリセットするか、再マッピングする
+            // 選択状態のインデックスの対応関係を再構築
+            // 単純化のため、並び替え時は選択状態をリセットするか、インデックスを再マップする
+            // ここでは直感的に分かりやすいよう選択状態をリセット（あるいは維持の調整）
+            // ユーザーが混乱しないよう、並び替え時は選択順をクリアするか追従させる。
+            // 配列の要素移動に伴うインデックス追従処理：
+            const oldSelected = [...selectedState[category]];
+            const newSelected = [];
+            
+            // 新しい配列内での移動後のインデックスを計算するのは複雑なため、
+            // 動かしたアイテムと他のアイテムの対応を追う
+            // 簡単なアプローチとして、並び替え時は選択を一旦リセットするか、再計算する。
+            // ここではシンプルに選択状態をクリアして再選択してもらう形にするか、あるいは保持する。
             selectedState[category] = [];
 
             loadItems(category);
@@ -365,17 +352,18 @@
         function updateOutput(category) {
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             const outputEl = document.getElementById('output-' + category);
-            const indices = selectedState[category];
+            
+            const selectedTexts = [];
+            // サプリの場合はカンマ「,」、食事の場合は「、」を使用
+            const separator = (category === 'supple') ? ',' : '、';
 
-            if (category === 'shokuji') {
-                // 食事は「、」で結合
-                const selectedTexts = indices.map(idx => items[idx] ? items[idx] + '、' : '');
-                outputEl.value = selectedTexts.join('');
-            } else if (category === 'supple') {
-                // サプリは改行区切りで出力
-                const selectedTexts = indices.map(idx => items[idx] || '');
-                outputEl.value = selectedTexts.join('\n');
-            }
+            selectedState[category].forEach(idx => {
+                if (items[idx]) {
+                    selectedTexts.push(items[idx] + separator);
+                }
+            });
+
+            outputEl.value = selectedTexts.join('');
         }
 
         function addItem(category) {
@@ -403,9 +391,16 @@
             items.splice(index, 1);
             localStorage.setItem(getStorageKey(category), JSON.stringify(items));
 
-            // 選択状態をリセット
-            selectedState[category] = [];
+            // 選択状態の配列から該当インデックスを削除し、後ろのインデックスをずらす
+            let arr = selectedState[category];
+            arr = arr.filter(idx => idx !== index).map(idx => idx > index ? idx - 1 : idx);
+            selectedState[category] = arr;
 
+            loadItems(category);
+        }
+
+        function clearOutput(category) {
+            selectedState[category] = [];
             loadItems(category);
         }
 
