@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文字列コピペツール</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .card {
+            background: #fff;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            font-size: 1.25rem;
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+            margin-top: 0;
+        }
+        p.note {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .success-msg {
+            display: inline-block;
+            margin-left: 10px;
+            color: #27ae60;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>文字列コピペツール</h1>
+
+    <div class="card">
+        <h2>食事</h2>
+        <p class="note">※価格面（コストパフォーマンス）と栄養面（バランス・カロリー等）を考慮した内容を管理します。</p>
+        <textarea id="text-shokuji" placeholder="ここに食事のメニューやレシピ、コスト・栄養のメモを入力・コピペしてください..."></textarea>
+        <div>
+            <button onclick="copyToClipboard('text-shokuji', 'msg-shokuji')">コピーする</button>
+            <span id="msg-shokuji" class="success-msg">コピーしました！</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>サプリ</h2>
+        <p class="note">※コストと摂取栄養素の効率を管理するためのメモエリアです。</p>
+        <textarea id="text-supple" placeholder="ここにサプリメントの名称や価格、栄養成分のメモを入力・コピペしてください..."></textarea>
+        <div>
+            <button onclick="copyToClipboard('text-supple', 'msg-supple')">コピーする</button>
+            <span id="msg-supple" class="success-msg">コピーしました！</span>
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard(elementId, msgId) {
+            const textarea = document.getElementById(elementId);
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+            
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const msg = document.getElementById(msgId);
+                msg.style.opacity = 1;
+                setTimeout(() => {
+                    msg.style.opacity = 0;
+                }, 1500);
+            }).catch(err => {
+                alert('コピーに失敗しました');
+            });
+        }
+    </script>
+
+</body>
+</html>
