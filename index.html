@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文字列コピペツール</title>
+    <title>ワンクリック文字列コピペツール</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,16 +34,18 @@
         p.note {
             font-size: 0.85rem;
             color: #666;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
-        textarea {
-            width: 100%;
-            height: 120px;
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            flex: 1;
             padding: 10px;
-            box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
-            resize: vertical;
             font-size: 1rem;
         }
         button {
@@ -54,60 +56,178 @@
             font-size: 1rem;
             border-radius: 4px;
             cursor: pointer;
-            margin-top: 10px;
+            white-space: nowrap;
         }
         button:hover {
             background-color: #2980b9;
         }
-        .success-msg {
-            display: inline-block;
-            margin-left: 10px;
-            color: #27ae60;
-            font-weight: bold;
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .item-row {
+            display: flex;
+            align-items: center;
+            background: #f1f2f6;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #dcdde1;
+        }
+        .copy-btn {
+            flex: 1;
+            background: transparent;
+            color: #2c3e50;
+            border: none;
+            padding: 12px 15px;
+            text-align: left;
+            font-size: 1rem;
+            cursor: pointer;
+            word-break: break-all;
+        }
+        .copy-btn:hover {
+            background: #dfe4ea;
+        }
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 15px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 0;
+        }
+        .delete-btn:hover {
+            background-color: #c0392b;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #2ecc71;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             opacity: 0;
             transition: opacity 0.3s ease;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .toast.show {
+            opacity: 1;
         }
     </style>
 </head>
 <body>
 
-    <h1>文字列コピペツール</h1>
+    <h1>ワンクリック文字列コピペツール</h1>
 
+    <!-- 食事セクション -->
     <div class="card">
         <h2>食事</h2>
-        <p class="note">※価格面（コストパフォーマンス）と栄養面（バランス・カロリー等）を考慮した内容を管理します。</p>
-        <textarea id="text-shokuji" placeholder="ここに食事のメニューやレシピ、コスト・栄養のメモを入力・コピペしてください..."></textarea>
-        <div>
-            <button onclick="copyToClipboard('text-shokuji', 'msg-shokuji')">コピーする</button>
-            <span id="msg-shokuji" class="success-msg">コピーしました！</span>
+        <p class="note">※価格面（コストパフォーマンス）や栄養面（バランス等）に関する定型文やメモを登録します。</p>
+        <div class="input-group">
+            <input type="text" id="input-shokuji" placeholder="登録する文字列を入力...">
+            <button onclick="addItem('shokuji')">追加</button>
         </div>
+        <div id="list-shokuji" class="item-list"></div>
     </div>
 
+    <!-- サプリセクション -->
     <div class="card">
         <h2>サプリ</h2>
-        <p class="note">※コストと摂取栄養素の効率を管理するためのメモエリアです。</p>
-        <textarea id="text-supple" placeholder="ここにサプリメントの名称や価格、栄養成分のメモを入力・コピペしてください..."></textarea>
-        <div>
-            <button onclick="copyToClipboard('text-supple', 'msg-supple')">コピーする</button>
-            <span id="msg-supple" class="success-msg">コピーしました！</span>
+        <p class="note">※コストパフォーマンスや摂取効率に関するメモ・文字列を登録します。</p>
+        <div class="input-group">
+            <input type="text" id="input-supple" placeholder="登録する文字列を入力...">
+            <button onclick="addItem('supple')">追加</button>
         </div>
+        <div id="list-supple" class="item-list"></div>
     </div>
 
+    <!-- トースト通知 -->
+    <div id="toast" class="toast">コピーしました！</div>
+
     <script>
-        function copyToClipboard(elementId, msgId) {
-            const textarea = document.getElementById(elementId);
-            textarea.select();
-            textarea.setSelectionRange(0, 99999);
+        // 初期データの読み込みと描画
+        document.addEventListener('DOMContentLoaded', () => {
+            loadItems('shokuji');
+            loadItems('supple');
+
+            // Enterキーでの追加に対応
+            document.getElementById('input-shokuji').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addItem('shokuji');
+            });
+            document.getElementById('input-supple').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addItem('supple');
+            });
+        });
+
+        function getStorageKey(category) {
+            return 'copypaste_tool_' + category;
+        }
+
+        function loadItems(category) {
+            const listEl = document.getElementById('list-' + category);
+            listEl.innerHTML = '';
             
-            navigator.clipboard.writeText(textarea.value).then(() => {
-                const msg = document.getElementById(msgId);
-                msg.style.opacity = 1;
-                setTimeout(() => {
-                    msg.style.opacity = 0;
-                }, 1500);
+            const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            
+            items.forEach((text, index) => {
+                const row = document.createElement('div');
+                row.className = 'item-row';
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.textContent = text;
+                copyBtn.onclick = () => copyText(text);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '削除';
+                deleteBtn.onclick = () => deleteItem(category, index);
+
+                row.appendChild(copyBtn);
+                row.appendChild(deleteBtn);
+                listEl.appendChild(row);
+            });
+        }
+
+        function addItem(category) {
+            const inputEl = document.getElementById('input-' + category);
+            const text = inputEl.value.trim();
+            
+            if (!text) return;
+
+            const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            items.push(text);
+            localStorage.setItem(getStorageKey(category), JSON.stringify(items));
+
+            inputEl.value = '';
+            loadItems(category);
+        }
+
+        function deleteItem(category, index) {
+            const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            items.splice(index, 1);
+            localStorage.setItem(getStorageKey(category), JSON.stringify(items));
+            loadItems(category);
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast();
             }).catch(err => {
                 alert('コピーに失敗しました');
             });
+        }
+
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 1500);
         }
     </script>
 
