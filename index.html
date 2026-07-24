@@ -64,7 +64,8 @@
         .item-list {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+            margin-bottom: 15px;
         }
         .item-row {
             display: flex;
@@ -74,7 +75,11 @@
             overflow: hidden;
             border: 1px solid #dcdde1;
         }
-        .copy-btn {
+        .item-row.selected {
+            background: #d4efdf;
+            border-color: #a3e4d7;
+        }
+        .select-btn {
             flex: 1;
             background: transparent;
             color: #2c3e50;
@@ -85,8 +90,8 @@
             cursor: pointer;
             word-break: break-all;
         }
-        .copy-btn:hover {
-            background: #dfe4ea;
+        .select-btn:hover {
+            background: rgba(0,0,0,0.05);
         }
         .delete-btn {
             background-color: #e74c3c;
@@ -99,6 +104,26 @@
         }
         .delete-btn:hover {
             background-color: #c0392b;
+        }
+        /* 出力・コピーエリア */
+        .output-box {
+            background: #f8f9fa;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+        .output-textarea {
+            width: 100%;
+            height: 60px;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            font-size: 1rem;
+            background: #fff;
+            margin-bottom: 8px;
         }
         .toast {
             position: fixed;
@@ -126,35 +151,51 @@
     <!-- 食事セクション -->
     <div class="card">
         <h2>食事</h2>
-        <p class="note">※価格面（コストパフォーマンス）や栄養面（バランス等）に関する定型文やメモを登録します。</p>
+        <p class="note">※項目をタップして選択すると、自動でカンマ区切りで結合されます。</p>
         <div class="input-group">
             <input type="text" id="input-shokuji" placeholder="登録する文字列を入力...">
             <button onclick="addItem('shokuji')">追加</button>
         </div>
         <div id="list-shokuji" class="item-list"></div>
+
+        <div class="output-box">
+            <p style="margin: 0 0 5px 0; font-size: 0.9rem; font-weight: bold; color: #555;">出力結果（選択中の項目）</p>
+            <textarea id="output-shokuji" class="output-textarea" readonly></textarea>
+            <button onclick="copyOutput('shokuji')">この内容をコピー</button>
+        </div>
     </div>
 
     <!-- サプリセクション -->
     <div class="card">
         <h2>サプリ</h2>
-        <p class="note">※コストパフォーマンスや摂取効率に関するメモ・文字列を登録します。</p>
+        <p class="note">※項目をタップして選択すると、自動でカンマ区切りで結合されます。</p>
         <div class="input-group">
             <input type="text" id="input-supple" placeholder="登録する文字列を入力...">
             <button onclick="addItem('supple')">追加</button>
         </div>
         <div id="list-supple" class="item-list"></div>
+
+        <div class="output-box">
+            <p style="margin: 0 0 5px 0; font-size: 0.9rem; font-weight: bold; color: #555;">出力結果（選択中の項目）</p>
+            <textarea id="output-supple" class="output-textarea" readonly></textarea>
+            <button onclick="copyOutput('supple')">この内容をコピー</button>
+        </div>
     </div>
 
     <!-- トースト通知 -->
     <div id="toast" class="toast">コピーしました！</div>
 
     <script>
-        // 初期データの読み込みと描画
+        // 各カテゴリの選択状態を保持するオブジェクト
+        const selectedState = {
+            shokuji: new Set(),
+            supple: new Set()
+        };
+
         document.addEventListener('DOMContentLoaded', () => {
             loadItems('shokuji');
             loadItems('supple');
 
-            // Enterキーでの追加に対応
             document.getElementById('input-shokuji').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') addItem('shokuji');
             });
@@ -173,24 +214,63 @@
             
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             
+            // 存在しないインデックスが選択状態に残っていればクリア
+            selectedState[category].forEach(idx => {
+                if (idx >= items.length) selectedState[category].delete(idx);
+            });
+
             items.forEach((text, index) => {
                 const row = document.createElement('div');
                 row.className = 'item-row';
+                if (selectedState[category].has(index)) {
+                    row.classList.add('selected');
+                }
 
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'copy-btn';
-                copyBtn.textContent = text;
-                copyBtn.onclick = () => copyText(text);
+                const selectBtn = document.createElement('button');
+                selectBtn.className = 'select-btn';
+                selectBtn.textContent = text;
+                selectBtn.onclick = () => toggleSelect(category, index);
 
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = '削除';
-                deleteBtn.onclick = () => deleteItem(category, index);
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteItem(category, index);
+                };
 
-                row.appendChild(copyBtn);
+                row.appendChild(selectBtn);
                 row.appendChild(deleteBtn);
                 listEl.appendChild(row);
             });
+
+            updateOutput(category);
+        }
+
+        function toggleSelect(category, index) {
+            if (selectedState[category].has(index)) {
+                selectedState[category].delete(index);
+            } else {
+                selectedState[category].add(index);
+            }
+            loadItems(category);
+        }
+
+        function updateOutput(category) {
+            const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
+            const outputEl = document.getElementById('output-' + category);
+            
+            const selectedTexts = [];
+            // 登録されている順序を保って結合するためにソート
+            const sortedIndices = Array.from(selectedState[category]).sort((a, b) => a - b);
+            
+            sortedIndices.forEach(idx => {
+                if (items[idx]) {
+                    selectedTexts.push(items[idx] + '、');
+                }
+            });
+
+            outputEl.value = selectedTexts.join('');
         }
 
         function addItem(category) {
@@ -211,11 +291,26 @@
             const items = JSON.parse(localStorage.getItem(getStorageKey(category))) || [];
             items.splice(index, 1);
             localStorage.setItem(getStorageKey(category), JSON.stringify(items));
+
+            // 選択状態のインデックスを再構築（削除されたインデックス以降をずらす）
+            const newSelected = new Set();
+            selectedState[category].forEach(idx => {
+                if (idx < index) {
+                    newSelected.add(idx);
+                } else if (idx > index) {
+                    newSelected.add(idx - 1);
+                }
+            });
+            selectedState[category] = newSelected;
+
             loadItems(category);
         }
 
-        function copyText(text) {
-            navigator.clipboard.writeText(text).then(() => {
+        function copyOutput(category) {
+            const outputEl = document.getElementById('output-' + category);
+            if (!outputEl.value) return;
+
+            navigator.clipboard.writeText(outputEl.value).then(() => {
                 showToast();
             }).catch(err => {
                 alert('コピーに失敗しました');
